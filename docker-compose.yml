@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "10402:10402"
+    volumes:
+      - ./backend:/app
+      - ./data_portal.db:/app/data_portal.db
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./data_portal.db
+      - SECRET_KEY=development-secret-key-change-in-production
+      - FRONTEND_URL=http://localhost:10401
+    command: uvicorn app.main:app --host 0.0.0.0 --port 10402 --reload
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "10401:10401"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - BACKEND_URL=http://backend:10402
+    command: npm run dev -- -p 10401
