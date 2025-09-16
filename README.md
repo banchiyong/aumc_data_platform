@@ -36,9 +36,14 @@ docker-compose up
 
 ## 접속 정보
 
+### 로컬 개발 환경
 - 프론트엔드: http://localhost:10401
 - 백엔드 API: http://localhost:10402
 - API 문서: http://localhost:10402/docs
+
+### 개발 서버 (테스트용)
+- 프론트엔드: http://amm.iptime.org:10401
+- 백엔드 Swagger: http://amm.iptime.org:10402/docs
 
 ## 기본 계정
 
