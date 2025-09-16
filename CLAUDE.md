@@ -467,3 +467,27 @@ conn.close()
 # 프론트엔드 빌드 에러 확인
 cd frontend && npm run build
 ```
+
+## 📁 Git 리포지토리 정보
+
+**GitHub Repository**: https://github.com/banchiyong/aumc_data_platform
+- **Owner**: banchiyong
+- **Repository Name**: aumc_data_platform  
+- **Branch**: main
+- **Visibility**: Public
+
+### Git 명령어
+```bash
+# 클론
+git clone https://github.com/banchiyong/aumc_data_platform.git
+
+# 변경사항 커밋
+git add .
+git commit -m "커밋 메시지"
+
+# 푸시
+git push origin main
+
+# 풀
+git pull origin main
+```
