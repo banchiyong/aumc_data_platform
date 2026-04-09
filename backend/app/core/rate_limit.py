@@ -39,8 +39,8 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Res
 # Strict limit for password reset to prevent abuse
 password_reset_limit = limiter.limit("3 per hour")
 
-# Moderate limit for authentication endpoints
-auth_limit = limiter.limit("10 per hour")
+# Increased login/auth limit
+auth_limit = limiter.limit("100 per hour")
 
 # Standard limit for general API endpoints
 api_limit = limiter.limit("100 per hour")

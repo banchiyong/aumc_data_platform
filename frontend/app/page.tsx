@@ -41,12 +41,9 @@ export default async function HomePage() {
           </div>
         </div>
         
-        <div className="flex gap-4 justify-center">
+        <div className="flex justify-center">
           <Link href="/login">
             <Button size="lg">로그인</Button>
-          </Link>
-          <Link href="/register">
-            <Button size="lg" variant="outline">회원가입</Button>
           </Link>
         </div>
       </div>

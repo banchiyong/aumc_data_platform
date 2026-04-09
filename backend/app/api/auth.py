@@ -94,7 +94,7 @@ async def login(request: Request, response: Response, user_credentials: UserLogi
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid email format"
+            detail="이메일 형식이 올바르지 않습니다"
         )
     
     result = await db.execute(
@@ -113,20 +113,20 @@ async def login(request: Request, response: Response, user_credentials: UserLogi
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid password format"
+            detail="비밀번호 형식이 올바르지 않습니다"
         )
     
     if not user or not verify_password(decrypted_password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="이메일 또는 비밀번호가 올바르지 않습니다",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Inactive user"
+            detail="비활성화된 계정입니다"
         )
     
     user.last_login_at = datetime.utcnow()

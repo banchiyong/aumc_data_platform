@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
@@ -7,7 +7,9 @@ from datetime import datetime, timezone, timedelta
 import os
 import shutil
 import uuid
+import json
 from pathlib import Path
+from pydantic import ValidationError
 
 from app.db.session import get_db
 from app.core.deps import get_current_user, get_current_admin_user
@@ -47,6 +49,65 @@ def get_safe_filename(original_filename: str, file_type: str) -> str:
     timestamp = get_korean_time().strftime('%Y%m%d_%H%M%S')
     
     return f"{file_type}_{timestamp}_{unique_id}.{ext}"
+
+
+async def parse_application_create_request(request: Request) -> tuple[dict, ApplicationStatus, UploadFile | None, UploadFile | None]:
+    """신규 신청 생성 요청(JSON 또는 multipart/form-data)을 파싱한다."""
+    content_type = request.headers.get("content-type", "")
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        service_types_raw = form.get("service_types", "[]")
+        if isinstance(service_types_raw, str):
+            try:
+                service_types = json.loads(service_types_raw)
+            except json.JSONDecodeError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="service_types 형식이 올바르지 않습니다"
+                ) from exc
+        else:
+            service_types = service_types_raw
+
+        payload = {
+            "project_name": form.get("project_name"),
+            "applicant_phone": form.get("applicant_phone"),
+            "principal_investigator": form.get("principal_investigator"),
+            "pi_department": form.get("pi_department"),
+            "irb_number": form.get("irb_number"),
+            "desired_completion_date": form.get("desired_completion_date") or None,
+            "service_types": service_types,
+            "unstructured_data_type": form.get("unstructured_data_type") or None,
+            "target_patients": form.get("target_patients"),
+            "request_details": form.get("request_details"),
+        }
+        status_value = form.get("status") or ApplicationStatus.SUBMITTED.value
+        irb_document = form.get("irb_document")
+        research_plan = form.get("research_plan")
+    else:
+        payload = await request.json()
+        status_value = payload.pop("status", ApplicationStatus.SUBMITTED.value)
+        irb_document = None
+        research_plan = None
+
+    try:
+        requested_status = ApplicationStatus(status_value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"지원하지 않는 신청 상태입니다: {status_value}"
+        ) from exc
+
+    if requested_status not in [ApplicationStatus.DRAFT, ApplicationStatus.SUBMITTED]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="신규 신청은 임시저장 또는 제출 상태로만 생성할 수 있습니다"
+        )
+
+    parsed_irb_document = irb_document if getattr(irb_document, "filename", None) else None
+    parsed_research_plan = research_plan if getattr(research_plan, "filename", None) else None
+
+    return payload, requested_status, parsed_irb_document, parsed_research_plan
 
 
 def save_uploaded_file(file: UploadFile, application_id: str, file_type: str) -> dict:
@@ -136,20 +197,29 @@ async def get_applications(
 
 @router.post("/", response_model=ApplicationSchema)
 async def create_application(
-    application_in: ApplicationCreate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    try:
+        payload, requested_status, irb_document, research_plan = await parse_application_create_request(request)
+        application_in = ApplicationCreate.model_validate(payload)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=exc.errors()
+        ) from exc
+
     # 신청 시점의 사용자 정보 저장
-    application_data = application_in.dict()
+    application_data = application_in.model_dump()
     application_data.update({
         'user_id': current_user.id,
         'applicant_name': current_user.name,
         'applicant_department': current_user.department or '',
         'applicant_email': current_user.email,
-        'service_types': [st.value for st in application_in.service_types],  # Enum을 문자열로 변환
-        'status': ApplicationStatus.SUBMITTED,  # 신청 완료 상태로 설정
-        'submitted_at': get_korean_time()  # 제출 시간 기록 (한국 표준시)
+        'service_types': [st.value for st in application_in.service_types],
+        'status': requested_status,
+        'submitted_at': get_korean_time() if requested_status == ApplicationStatus.SUBMITTED else None
     })
     
     application = Application(**application_data)
@@ -157,11 +227,25 @@ async def create_application(
     db.add(application)
     await db.commit()
     await db.refresh(application)
+
+    if irb_document:
+        file_info = save_uploaded_file(irb_document, application.id, "irb")
+        application.irb_document_path = file_info["file_path"]
+        application.irb_document_original_name = file_info["original_filename"]
+
+    if research_plan:
+        file_info = save_uploaded_file(research_plan, application.id, "research_plan")
+        application.research_plan_path = file_info["file_path"]
+        application.research_plan_original_name = file_info["original_filename"]
+
+    if irb_document or research_plan:
+        await db.commit()
+        await db.refresh(application)
     
     log = ApplicationLog(
         application_id=application.id,
         user_id=current_user.id,
-        action=LogAction.SUBMITTED
+        action=LogAction.SUBMITTED if requested_status == ApplicationStatus.SUBMITTED else LogAction.CREATED
     )
     db.add(log)
     await db.commit()

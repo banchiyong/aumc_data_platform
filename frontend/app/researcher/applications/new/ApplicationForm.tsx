@@ -46,6 +46,12 @@ export default function ApplicationForm({ userData }: ApplicationFormProps) {
   const [error, setError] = useState('')
   const [touched, setTouched] = useState<Record<string, boolean>>({})
   const [attemptedSubmit, setAttemptedSubmit] = useState(false)
+
+  const logDevError = (message: string, detail?: unknown) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.error(`[application:new] ${message}`, detail)
+    }
+  }
   
   // 폼 데이터 - 사용자 정보만 초기값 설정
   const [formData, setFormData] = useState({
@@ -187,12 +193,14 @@ export default function ApplicationForm({ userData }: ApplicationFormProps) {
       const result = await createApplicationAction(submitFormData)
       
       if (result?.error) {
+        logDevError('신규 신청서 임시저장 실패', result.error)
         setError(result.error)
       } else {
         alert('임시 저장되었습니다.')
         router.push('/researcher/applications')
       }
     } catch (err: any) {
+      logDevError('신규 신청서 임시저장 중 예외 발생', err)
       setError('저장 중 오류가 발생했습니다')
     } finally {
       setLoading(false)
@@ -240,12 +248,14 @@ export default function ApplicationForm({ userData }: ApplicationFormProps) {
       const result = await createApplicationAction(submitFormData)
       
       if (result?.error) {
+        logDevError('신규 신청서 제출 실패', result.error)
         setError(result.error)
       } else {
         alert('신청서가 제출되었습니다.')
         router.push('/researcher/applications')
       }
     } catch (err: any) {
+      logDevError('신규 신청서 제출 중 예외 발생', err)
       setError('제출 중 오류가 발생했습니다')
     } finally {
       setLoading(false)

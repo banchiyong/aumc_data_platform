@@ -19,10 +19,6 @@ import {
   FileText, 
   Upload,
   User,
-  Phone,
-  Mail,
-  Building,
-  Calendar,
   Loader2,
   ChevronLeft,
   ChevronRight,
@@ -61,6 +57,49 @@ export default function MultiStepApplicationForm({ userData }: MultiStepApplicat
   const [error, setError] = useState('')
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [showSaveModal, setShowSaveModal] = useState(false)
+
+  const logDevError = (message: string, detail?: unknown) => {
+    if (process.env.NODE_ENV === 'development') {
+      console.error(`[application:new] ${message}`, detail)
+    }
+  }
+
+  const getStepValidationMessage = (step: Step): string | null => {
+    switch (step) {
+      case 1:
+        if (
+          !formData.project_name ||
+          !formData.applicant_name ||
+          !formData.applicant_email ||
+          !formData.applicant_phone ||
+          !formData.principal_investigator ||
+          !formData.pi_department ||
+          !formData.irb_number
+        ) {
+          return '기본 정보의 필수 항목을 모두 입력해주세요'
+        }
+        return null
+      case 2:
+        if (formData.service_types.length === 0) {
+          return '최소 1개 이상의 서비스 유형을 선택해주세요'
+        }
+        if (formData.service_types.includes('UNSTRUCTURED_EXTRACTION') && !formData.unstructured_data_type) {
+          return '비정형 추출 선택 시 비정형 데이터 유형을 입력해주세요'
+        }
+        if (!formData.target_patients || formData.target_patients.length < 10) {
+          return '대상환자는 최소 10자 이상 입력해주세요'
+        }
+        if (!formData.request_details || formData.request_details.length < 20) {
+          return '요청 상세 내용은 최소 20자 이상 입력해주세요'
+        }
+        return null
+      case 3:
+      case 4:
+        return null
+      default:
+        return null
+    }
+  }
   
   // 폼 데이터
   const [formData, setFormData] = useState({
@@ -131,36 +170,10 @@ export default function MultiStepApplicationForm({ userData }: MultiStepApplicat
   }
 
   const validateStep = (step: Step): boolean => {
-    setError('')
-    switch (step) {
-      case 1:
-        if (!formData.project_name || !formData.applicant_name || !formData.applicant_email || 
-            !formData.principal_investigator || !formData.pi_department || !formData.irb_number) {
-          setError('모든 필수 정보를 입력해주세요')
-          return false
-        }
-        break
-      case 2:
-        if (formData.service_types.length === 0) {
-          setError('최소 1개 이상의 서비스 유형을 선택해주세요')
-          return false
-        }
-        if (formData.service_types.includes('UNSTRUCTURED_EXTRACTION') && !formData.unstructured_data_type) {
-          setError('비정형 추출 선택 시 비정형 데이터 유형을 입력해주세요')
-          return false
-        }
-        if (!formData.target_patients || formData.target_patients.length < 10) {
-          setError('대상환자는 최소 10자 이상 입력해주세요')
-          return false
-        }
-        if (!formData.request_details || formData.request_details.length < 20) {
-          setError('요청 상세 내용은 최소 20자 이상 입력해주세요')
-          return false
-        }
-        break
-      case 3:
-        // 첨부파일은 선택사항이므로 검증하지 않음
-        break
+    const validationMessage = getStepValidationMessage(step)
+    if (validationMessage) {
+      setError(validationMessage)
+      return false
     }
     return true
   }
@@ -168,6 +181,18 @@ export default function MultiStepApplicationForm({ userData }: MultiStepApplicat
   const validateAllSteps = (): boolean => {
     // 제출 시에는 1, 2단계만 필수 검증 (3단계 첨부파일은 선택사항)
     return validateStep(1) && validateStep(2)
+  }
+
+  const handleStepClick = (targetStep: Step) => {
+    setCurrentStep(targetStep)
+
+    const firstInvalidStep = ([1, 2, 3, 4] as Step[]).find((step) => getStepValidationMessage(step))
+    if (firstInvalidStep) {
+      setError(getStepValidationMessage(firstInvalidStep) || '')
+      return
+    }
+
+    setError('')
   }
 
   const handleServiceTypeChange = (typeId: string, checked: boolean) => {
@@ -211,6 +236,7 @@ export default function MultiStepApplicationForm({ userData }: MultiStepApplicat
           submitFormData.append(key, value as string)
         }
       })
+      submitFormData.append('status', 'SUBMITTED')
 
       if (files.irb_document) {
         submitFormData.append('irb_document', files.irb_document)
@@ -222,6 +248,7 @@ export default function MultiStepApplicationForm({ userData }: MultiStepApplicat
       const result = await createApplicationAction(submitFormData)
       
       if (result?.error) {
+        logDevError('신규 신청서 제출 실패', result.error)
         setError(result.error)
       } else {
         // 성공 시 임시 저장 데이터 삭제
@@ -229,6 +256,7 @@ export default function MultiStepApplicationForm({ userData }: MultiStepApplicat
         router.push('/researcher/applications')
       }
     } catch (err: any) {
+      logDevError('신규 신청서 제출 중 예외 발생', err)
       setError('신청서 제출 중 오류가 발생했습니다')
     }
     
@@ -275,27 +303,46 @@ export default function MultiStepApplicationForm({ userData }: MultiStepApplicat
             <Progress value={(currentStep / 4) * 100} className="w-full" />
             
             <div className="flex justify-between text-xs text-gray-600">
-              {STEPS.map((step, index) => (
-                <div 
+              {STEPS.map((step) => {
+                const stepNumber = step.number as Step
+                const stepError = getStepValidationMessage(stepNumber)
+                const isActive = currentStep === stepNumber
+                const isCompleted = currentStep > stepNumber
+
+                return (
+                <button
                   key={step.number}
-                  className={`text-center ${currentStep >= step.number ? 'text-blue-600 font-medium' : ''}`}
+                  type="button"
+                  onClick={() => handleStepClick(stepNumber)}
+                  disabled={loading}
+                  className={`flex min-w-0 flex-1 flex-col items-center rounded-md px-2 py-2 text-center transition-colors ${
+                    stepError
+                      ? 'text-red-600 font-bold'
+                      : currentStep >= step.number
+                        ? 'text-blue-600 font-medium'
+                        : 'text-gray-600'
+                  } ${loading ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-gray-50'}`}
+                  aria-current={isActive ? 'step' : undefined}
                 >
-                  <div className="mb-1">{step.title}</div>
+                  <div
+                    className={`mb-1 flex h-6 w-6 items-center justify-center rounded-full border text-[11px] ${
+                      stepError
+                        ? 'border-red-600 bg-red-50'
+                        : isActive || isCompleted
+                          ? 'border-blue-600 bg-blue-50'
+                          : 'border-gray-300 bg-white'
+                    }`}
+                  >
+                    {step.number}
+                  </div>
+                  <div>{step.title}</div>
                   <div className="text-gray-400">{step.description}</div>
-                </div>
-              ))}
+                </button>
+              )})}
             </div>
           </div>
         </CardContent>
       </Card>
-
-      {/* 에러 메시지 */}
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
 
       {/* 단계별 내용 */}
       <Card>
@@ -314,6 +361,14 @@ export default function MultiStepApplicationForm({ userData }: MultiStepApplicat
           {renderStepContent()}
         </CardContent>
       </Card>
+
+      {/* 에러 메시지 */}
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
       {/* 네비게이션 버튼 */}
       <div className="flex justify-between">

@@ -1,10 +1,19 @@
+import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
-import { api } from '@/lib/api'
+
+const API_BASE_URL = process.env.BACKEND_URL || 'http://localhost:10402'
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const cookieStore = cookies()
+  const accessToken = cookieStore.get('access_token')
+
+  if (!accessToken) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   try {
     const body = await request.json()
     const { status } = body
@@ -13,13 +22,25 @@ export async function PUT(
       return NextResponse.json({ error: 'Status is required' }, { status: 400 })
     }
 
-    const response = await api.applications.updateStatus(params.id, status)
-    
-    if (response.error) {
-      return NextResponse.json({ error: response.error }, { status: 400 })
+    const response = await fetch(
+      `${API_BASE_URL}/api/applications/${params.id}/status`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken.value}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.text()
+      return new NextResponse(error, { status: response.status })
     }
 
-    return NextResponse.json(response.data)
+    const data = await response.json()
+    return NextResponse.json(data)
   } catch (error) {
     console.error('Status update error:', error)
     return NextResponse.json(

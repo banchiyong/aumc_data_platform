@@ -49,7 +49,7 @@ if IS_TESTING:
 else:
     # 프로덕션 모드: 시간 단위 유지
     password_reset_limit = limiter.limit("3 per hour")
-    auth_limit = limiter.limit("10 per hour")
+    auth_limit = limiter.limit("100 per hour")
     api_limit = limiter.limit("100 per hour")
     admin_limit = limiter.limit("30 per hour")
     read_limit = limiter.limit("200 per hour")
