@@ -28,25 +28,26 @@ export default function LoginPage() {
   async function handleSubmit(formData: FormData) {
     setLoading(true)
     setError('')
-    
+
     try {
       // 사용자명에 @aumc.ac.kr 자동 추가
       const username = formData.get('username') as string
       const email = `${username}@aumc.ac.kr`
-      
+
       // 새로운 FormData 생성
       const newFormData = new FormData()
       newFormData.append('email', email)
       newFormData.append('password', formData.get('password') as string)
-      
+
       const result = await loginAction(newFormData)
-      
-      // loginAction이 에러를 throw하지 않고 리턴한 경우 처리
+
       if (result?.error) {
         setError(result.error)
         setLoading(false)
+      } else if (result?.success && result?.redirectPath) {
+        // 로그인 성공 - 역할별 페이지로 리다이렉트
+        router.push(result.redirectPath)
       }
-      // 성공시 리다이렉트는 loginAction에서 처리됨
     } catch (err: any) {
       // 네트워크 오류 등 예외 처리
       setError('로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.')
@@ -84,7 +85,7 @@ export default function LoginPage() {
                 <Mail className="h-4 w-4" />
                 사용자명
               </Label>
-              <div className="flex">
+              <div className="flex items-center gap-2">
                 <Input
                   id="username"
                   name="username"
@@ -92,11 +93,11 @@ export default function LoginPage() {
                   placeholder="사용자명"
                   required
                   disabled={loading}
-                  className="rounded-r-none"
+                  className="flex-1"
                 />
-                <div className="flex items-center px-3 bg-gray-100 border border-l-0 rounded-r-md text-gray-600">
+                <span className="text-gray-600 text-sm whitespace-nowrap">
                   @aumc.ac.kr
-                </div>
+                </span>
               </div>
               <p className="text-xs text-gray-500">
                 아주대학교병원 메일의 @ 앞 부분만 입력하세요

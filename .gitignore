@@ -115,3 +115,10 @@ docs/.doctrees/
 SECURITY_REPORT.md
 security_*.md
 *_security.md
+
+# Account credentials (DO NOT COMMIT)
+ACCOUNTS.md
+accounts.md
+*_accounts.md
+credentials.md
+*_credentials.md

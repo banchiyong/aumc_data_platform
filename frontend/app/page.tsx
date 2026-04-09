@@ -5,11 +5,15 @@ import { redirect } from 'next/navigation'
 
 export default async function HomePage() {
   // Check if user is logged in
-  const userResponse = await api.auth.me()
-  if (userResponse.data) {
-    // Redirect to appropriate dashboard based on role
-    const redirectPath = userResponse.data.role === 'ADMIN' ? '/admin' : '/researcher'
-    redirect(redirectPath)
+  try {
+    const userResponse = await api.auth.me()
+    if (userResponse.data) {
+      // Redirect to appropriate dashboard based on role
+      const redirectPath = userResponse.data.role === 'ADMIN' ? '/admin' : '/researcher'
+      redirect(redirectPath)
+    }
+  } catch (error) {
+    // User not logged in, show landing page
   }
   
   return (
