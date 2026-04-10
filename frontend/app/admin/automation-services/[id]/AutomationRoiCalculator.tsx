@@ -1,7 +1,7 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -38,6 +38,28 @@ function formatManwon(value: number) {
 function formatYears(value: number) {
   if (value < 1) return `${(value * 12).toFixed(1)}개월`
   return `${value.toFixed(2)}년`
+}
+
+function legacyCopyText(text: string) {
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.top = '-9999px'
+  textarea.style.left = '-9999px'
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+  const copied = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  return copied
+}
+
+function selectTextarea(textarea: HTMLTextAreaElement | null) {
+  if (!textarea) return
+  textarea.focus()
+  textarea.select()
+  textarea.setSelectionRange(0, textarea.value.length)
 }
 
 export default function AutomationRoiCalculator({
@@ -84,6 +106,7 @@ export default function AutomationRoiCalculator({
     String(Number(savedBasis?.annualEquipmentCostManwon) || 0)
   )
   const [saving, setSaving] = useState(false)
+  const summaryTextareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   const calculation = useMemo(() => {
     const salaryManwon = Number(annualSalaryManwon)
@@ -304,12 +327,29 @@ export default function AutomationRoiCalculator({
 
   const handleCopy = async () => {
     if (!summaryText) return
+
     try {
-      await navigator.clipboard.writeText(summaryText)
+      const clipboard = globalThis.navigator?.clipboard
+      if (!clipboard || typeof clipboard.writeText !== 'function') {
+        throw new Error('Clipboard API unavailable')
+      }
+
+      await clipboard.writeText(summaryText)
       alert('ROI 분석 결과를 복사했습니다.')
     } catch (error) {
+      try {
+        const copied = legacyCopyText(summaryText)
+        if (copied) {
+          selectTextarea(summaryTextareaRef.current)
+          alert('자동 복사가 제한되어 결과 텍스트를 선택했습니다. Ctrl+C 또는 Cmd+C로 복사해주세요.')
+          return
+        }
+      } catch (fallbackError) {
+        console.error('ROI summary fallback copy error:', fallbackError)
+      }
+      selectTextarea(summaryTextareaRef.current)
       console.error('ROI summary copy error:', error)
-      alert('결과 복사 중 오류가 발생했습니다.')
+      alert('자동 복사가 제한되었습니다. 결과 텍스트를 선택했으니 Ctrl+C 또는 Cmd+C로 복사해주세요.')
     }
   }
 
@@ -664,17 +704,20 @@ export default function AutomationRoiCalculator({
               </CardHeader>
               <CardContent className="space-y-2.5">
                 <textarea
+                  ref={summaryTextareaRef}
                   readOnly
                   value={summaryText}
                   className="min-h-[240px] w-full rounded-md border border-slate-200 bg-slate-50 p-2.5 text-[11px] leading-5 text-slate-700"
                 />
-                <Button variant="outline" onClick={handleCopy} disabled={!summaryText}>
-                  <Copy className="mr-2 h-4 w-4" />
-                  결과 복사
-                </Button>
-                <Button onClick={handleSave} disabled={!calculation || saving}>
-                  {saving ? '저장 중...' : 'ROI 결과 저장'}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={handleCopy} disabled={!summaryText}>
+                    <Copy className="mr-2 h-4 w-4" />
+                    결과 복사
+                  </Button>
+                  <Button variant="outline" onClick={handleSave} disabled={!calculation || saving}>
+                    {saving ? '저장 중...' : 'ROI 결과 저장'}
+                  </Button>
+                </div>
                 {savedRoiAt && (
                   <p className="text-[11px] text-slate-500">
                     마지막 저장: {new Date(savedRoiAt).toLocaleString('ko-KR')}

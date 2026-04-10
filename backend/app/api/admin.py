@@ -14,6 +14,7 @@ from app.models import (
     ApplicationLog,
     LogAction,
     AutomationRequest,
+    AutomationRequestStatus,
     AutomationRequestLog,
 )
 from app.schemas.user import User as UserSchema, UserUpdate
@@ -156,24 +157,46 @@ async def get_statistics(
     current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
-    today = datetime.utcnow().date()
-    thirty_days_ago = today - timedelta(days=30)
-    six_months_ago = today - timedelta(days=180)
+    now_utc = datetime.utcnow()
+    thirty_days_ago = now_utc - timedelta(days=30)
+    six_months_ago = now_utc - timedelta(days=180)
     
-    total_users = await db.execute(select(func.count(User.id)))
+    total_users = await db.execute(select(func.count(User.id)).where(User.dcyn == 'N'))
     active_users = await db.execute(
-        select(func.count(User.id)).where(User.is_active == True)
+        select(func.count(User.id)).where(User.dcyn == 'N', User.is_active == True)
     )
-    
-    total_applications = await db.execute(select(func.count(Application.id)))
-    
-    status_counts = await db.execute(
+    admin_users = await db.execute(
+        select(func.count(User.id)).where(User.dcyn == 'N', User.role == UserRole.ADMIN)
+    )
+    pending_users = await db.execute(
+        select(func.count(User.id)).where(User.dcyn == 'N', User.is_active == False)
+    )
+    recent_logins_7d = await db.execute(
+        select(func.count(User.id)).where(
+            User.dcyn == 'N',
+            User.last_login_at.isnot(None),
+            User.last_login_at >= datetime.utcnow() - timedelta(days=7),
+        )
+    )
+    recent_logins_30d = await db.execute(
+        select(func.count(User.id)).where(
+            User.dcyn == 'N',
+            User.last_login_at.isnot(None),
+            User.last_login_at >= datetime.utcnow() - timedelta(days=30),
+        )
+    )
+
+    total_applications = await db.execute(select(func.count(Application.id)).where(Application.dcyn == 'N'))
+
+    application_status_counts = await db.execute(
         select(Application.status, func.count(Application.id))
+        .where(Application.dcyn == 'N')
         .group_by(Application.status)
     )
     
     recent_applications = await db.execute(
         select(func.count(Application.id))
+        .where(Application.dcyn == 'N')
         .where(Application.created_at >= thirty_days_ago)
     )
     
@@ -185,6 +208,7 @@ async def get_statistics(
             extract('month', Application.created_at).label('month'),
             func.count(Application.id).label('count')
         )
+        .where(Application.dcyn == 'N')
         .where(Application.created_at >= six_months_ago)
         .group_by('year', 'month')
         .order_by('year', 'month')
@@ -195,16 +219,17 @@ async def get_statistics(
         for year, month, count in monthly_stats
     ]
     
-    status_dict = {status.value if hasattr(status, 'value') else status: count 
-                   for status, count in status_counts}
-    
-    approved_count = status_dict.get(ApplicationStatus.APPROVED.value, 0)
-    rejected_count = status_dict.get(ApplicationStatus.REJECTED.value, 0)
+    application_status_dict = {
+        status.value if hasattr(status, 'value') else status: count
+        for status, count in application_status_counts
+    }
+
+    approved_count = application_status_dict.get(ApplicationStatus.APPROVED.value, 0)
+    rejected_count = application_status_dict.get(ApplicationStatus.REJECTED.value, 0)
     total_reviewed = approved_count + rejected_count
-    
+
     approval_rate = (approved_count / total_reviewed * 100) if total_reviewed > 0 else 0
-    
-    # 평균 처리 시간 계산 (승인된 신청서 기준)
+
     avg_processing_time = await db.execute(
         select(
             func.avg(
@@ -212,23 +237,114 @@ async def get_statistics(
                 func.julianday(Application.submitted_at)
             )
         )
+        .where(Application.dcyn == 'N')
         .where(Application.status == ApplicationStatus.APPROVED)
         .where(Application.reviewed_at.isnot(None))
         .where(Application.submitted_at.isnot(None))
     )
-    avg_time = avg_processing_time.scalar() or 0
-    
+    avg_data_time = avg_processing_time.scalar() or 0
+
+    total_automation = await db.execute(
+        select(func.count(AutomationRequest.id)).where(AutomationRequest.dcyn == 'N')
+    )
+    automation_status_counts = await db.execute(
+        select(AutomationRequest.status, func.count(AutomationRequest.id))
+        .where(AutomationRequest.dcyn == 'N')
+        .group_by(AutomationRequest.status)
+    )
+    recent_automation = await db.execute(
+        select(func.count(AutomationRequest.id))
+        .where(AutomationRequest.dcyn == 'N')
+        .where(AutomationRequest.created_at >= thirty_days_ago)
+    )
+    automation_monthly_stats = await db.execute(
+        select(
+            extract('year', AutomationRequest.created_at).label('year'),
+            extract('month', AutomationRequest.created_at).label('month'),
+            func.count(AutomationRequest.id).label('count')
+        )
+        .where(AutomationRequest.dcyn == 'N')
+        .where(AutomationRequest.created_at >= six_months_ago)
+        .group_by('year', 'month')
+        .order_by('year', 'month')
+    )
+    automation_monthly_data = [
+        {"year": year, "month": month, "count": count}
+        for year, month, count in automation_monthly_stats
+    ]
+    automation_status_dict = {
+        status.value if hasattr(status, 'value') else status: count
+        for status, count in automation_status_counts
+    }
+    approved_automation_count = automation_status_dict.get(AutomationRequestStatus.APPROVED.value, 0)
+    rejected_automation_count = automation_status_dict.get(AutomationRequestStatus.REJECTED.value, 0)
+    total_reviewed_automation = approved_automation_count + rejected_automation_count
+    automation_approval_rate = (
+        approved_automation_count / total_reviewed_automation * 100
+        if total_reviewed_automation > 0
+        else 0
+    )
+    roi_saved_count = await db.execute(
+        select(func.count(AutomationRequest.id)).where(
+            AutomationRequest.dcyn == 'N',
+            AutomationRequest.roi_saved_at.isnot(None),
+        )
+    )
+
+    total_users_count = total_users.scalar() or 0
+    active_users_count = active_users.scalar() or 0
+    admin_users_count = admin_users.scalar() or 0
+    pending_users_count = pending_users.scalar() or 0
+    recent_logins_7d_count = recent_logins_7d.scalar() or 0
+    recent_logins_30d_count = recent_logins_30d.scalar() or 0
+    total_applications_count = total_applications.scalar() or 0
+    recent_applications_count = recent_applications.scalar() or 0
+    total_automation_count = total_automation.scalar() or 0
+    recent_automation_count = recent_automation.scalar() or 0
+    roi_saved_count_value = roi_saved_count.scalar() or 0
+
     return {
-        "total_users": total_users.scalar(),
-        "active_users": active_users.scalar(),
-        "total_applications": total_applications.scalar(),
-        "recent_applications": recent_applications.scalar(),
-        "status_breakdown": status_dict,
+        "total_users": total_users_count,
+        "active_users": active_users_count,
+        "total_applications": total_applications_count,
+        "recent_applications": recent_applications_count,
+        "status_breakdown": application_status_dict,
         "approval_rate": round(approval_rate, 2),
-        "pending_review": status_dict.get(ApplicationStatus.SUBMITTED.value, 0) + 
-                         status_dict.get(ApplicationStatus.UNDER_REVIEW.value, 0),
+        "pending_review": application_status_dict.get(ApplicationStatus.SUBMITTED.value, 0) + 
+                         application_status_dict.get(ApplicationStatus.UNDER_REVIEW.value, 0),
         "monthly_statistics": monthly_data,
-        "average_processing_days": round(avg_time, 1)
+        "average_processing_days": round(avg_data_time, 1),
+        "data_services": {
+            "total": total_applications_count,
+            "recent_30d": recent_applications_count,
+            "pending_review": application_status_dict.get(ApplicationStatus.SUBMITTED.value, 0)
+            + application_status_dict.get(ApplicationStatus.UNDER_REVIEW.value, 0),
+            "approval_rate": round(approval_rate, 2),
+            "average_processing_days": round(avg_data_time, 1),
+            "status_breakdown": application_status_dict,
+            "monthly_statistics": monthly_data,
+        },
+        "automation_services": {
+            "total": total_automation_count,
+            "recent_30d": recent_automation_count,
+            "pending_review": automation_status_dict.get(AutomationRequestStatus.SUBMITTED.value, 0)
+            + automation_status_dict.get(AutomationRequestStatus.UNDER_REVIEW.value, 0),
+            "approval_rate": round(automation_approval_rate, 2),
+            "completed": automation_status_dict.get(AutomationRequestStatus.COMPLETED.value, 0),
+            "roi_saved": roi_saved_count_value,
+            "status_breakdown": automation_status_dict,
+            "monthly_statistics": automation_monthly_data,
+        },
+        "user_statistics": {
+            "total": total_users_count,
+            "active": active_users_count,
+            "inactive": total_users_count - active_users_count,
+            "admins": admin_users_count,
+            "researchers": total_users_count - admin_users_count,
+            "pending_approval": pending_users_count,
+            "recent_logins_7d": recent_logins_7d_count,
+            "recent_logins_30d": recent_logins_30d_count,
+        },
     }
 
 
