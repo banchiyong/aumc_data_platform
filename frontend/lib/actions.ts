@@ -4,30 +4,20 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:10402';
-const CryptoJS = require('crypto-js');
-const SECRET_KEY = 'data-portal-secure-key-2024';
-
-function encryptData(text: string): string {
-  return CryptoJS.AES.encrypt(text, SECRET_KEY).toString();
-}
 
 export async function loginAction(formData: FormData) {
   const email = formData.get('email') as string
   const password = formData.get('password') as string
 
   try {
-    // Encrypt credentials
-    const encryptedEmail = encryptData(email);
-    const encryptedPassword = encryptData(password);
-
     const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email: encryptedEmail,
-        password: encryptedPassword,
+        email,
+        password,
       }),
     });
 
@@ -87,18 +77,14 @@ export async function registerAction(formData: FormData) {
   const phone = formData.get('phone') as string
 
   try {
-    // Encrypt credentials
-    const encryptedEmail = encryptData(email);
-    const encryptedPassword = encryptData(password);
-
     const response = await fetch(`${BACKEND_URL}/api/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        email: encryptedEmail,
-        password: encryptedPassword,
+        email,
+        password,
         name,
         department: department || undefined,
         position: position || undefined,

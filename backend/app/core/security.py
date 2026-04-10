@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Optional, Union
+import hashlib
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.core.config import settings
@@ -24,6 +25,10 @@ def create_refresh_token(data: dict) -> str:
     to_encode.update({"exp": expire, "type": "refresh"})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(f"{settings.SECRET_KEY}:{token}".encode()).hexdigest()
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

@@ -28,6 +28,21 @@ export async function GET(
   const targetUrl = `${API_BASE_URL}/${proxiedPath}${search}`
 
   try {
+    const meResponse = await fetch(`${API_BASE_URL}/api/auth/me`, {
+      headers: {
+        Authorization: `Bearer ${accessToken.value}`,
+      },
+    })
+
+    if (!meResponse.ok) {
+      return new NextResponse('Unauthorized', { status: 401 })
+    }
+
+    const currentUser = await meResponse.json()
+    if (currentUser.role !== 'ADMIN') {
+      return new NextResponse('Forbidden', { status: 403 })
+    }
+
     const response = await fetch(targetUrl, {
       headers: {
         Authorization: `Bearer ${accessToken.value}`,

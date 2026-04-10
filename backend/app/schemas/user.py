@@ -15,8 +15,8 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     password: str = Field(
         ...,
-        description="AES로 암호화된 비밀번호 (클라이언트에서 암호화 후 전송)",
-        example="U2FsdGVkX1+vupppZksvRf5pq5g5XjFRIipRkwB0K1Y="
+        description="사용자 비밀번호",
+        example="password123!"
     )
 
 
@@ -48,19 +48,19 @@ class User(UserInDB):
 class UserLogin(BaseModel):
     email: str = Field(
         ...,
-        description="AES로 암호화된 사용자 이메일 (클라이언트에서 암호화 후 전송)",
-        example="U2FsdGVkX194+gNiIuZjy95pCOHkGOIp+Pgn/0hh/zg="
+        description="사용자 이메일",
+        example="user@aumc.ac.kr"
     )
     password: str = Field(
         ...,
-        description="AES로 암호화된 비밀번호 (클라이언트에서 암호화 후 전송)",
-        example="U2FsdGVkX1+vupppZksvRf5pq5g5XjFRIipRkwB0K1Y="
+        description="사용자 비밀번호",
+        example="password123!"
     )
     
     class Config:
         json_schema_extra = {
             "example": {
-                "email": "U2FsdGVkX194+gNiIuZjy95pCOHkGOIp+Pgn/0hh/zg=",
-                "password": "U2FsdGVkX1+vupppZksvRf5pq5g5XjFRIipRkwB0K1Y="
+                "email": "user@aumc.ac.kr",
+                "password": "password123!"
             }
         }

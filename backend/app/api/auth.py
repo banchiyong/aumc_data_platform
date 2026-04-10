@@ -4,7 +4,7 @@ from sqlalchemy import select, and_
 from datetime import datetime, timedelta
 
 from app.db.session import get_db
-from app.core.security import verify_password, get_password_hash, create_access_token, create_refresh_token, decode_token
+from app.core.security import verify_password, get_password_hash, create_access_token, create_refresh_token, decode_token, hash_token
 from app.core.deps import get_current_user
 from app.core.rate_limit import auth_limit, password_reset_limit
 from app.core.crypto import decrypt_password
@@ -17,27 +17,19 @@ from app.core.config import settings
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
 
+def decode_or_passthrough(value: str) -> str:
+    try:
+        return decrypt_password(value)
+    except Exception:
+        return value
+
+
 @router.post("/register", response_model=UserSchema)
 async def register(
     user_in: UserCreate, 
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    새 사용자 계정 생성
-    
-    **중요**: 이메일과 비밀번호는 클라이언트에서 AES 암호화하여 전송해야 합니다.
-    - 평문 이메일/비밀번호는 허용되지 않습니다.
-    - 암호화 키: 'data-portal-secure-key-2024'
-    - 암호화 방식: AES (CryptoJS 호환)
-    """
-    # 암호화된 이메일 복호화
-    try:
-        decrypted_email = decrypt_password(user_in.email)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid email format"
-        )
+    decrypted_email = decode_or_passthrough(user_in.email)
     
     # Validate email domain - must be @aumc.ac.kr
     if not decrypted_email.endswith("@aumc.ac.kr"):
@@ -60,14 +52,7 @@ async def register(
             detail="Email already registered"
         )
     
-    # 암호화된 비밀번호 복호화
-    try:
-        decrypted_password = decrypt_password(user_in.password)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid password format"
-        )
+    decrypted_password = decode_or_passthrough(user_in.password)
     
     user = User(
         email=decrypted_email,
@@ -89,14 +74,7 @@ async def register(
 @router.post("/login", response_model=Token)
 @auth_limit
 async def login(request: Request, response: Response, user_credentials: UserLogin, db: AsyncSession = Depends(get_db)):
-    # 암호화된 이메일 복호화
-    try:
-        decrypted_email = decrypt_password(user_credentials.email)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="이메일 형식이 올바르지 않습니다"
-        )
+    decrypted_email = decode_or_passthrough(user_credentials.email)
     
     result = await db.execute(
         select(User).where(
@@ -108,14 +86,7 @@ async def login(request: Request, response: Response, user_credentials: UserLogi
     )
     user = result.scalar_one_or_none()
     
-    # 암호화된 비밀번호 복호화
-    try:
-        decrypted_password = decrypt_password(user_credentials.password)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="비밀번호 형식이 올바르지 않습니다"
-        )
+    decrypted_password = decode_or_passthrough(user_credentials.password)
     
     if not user or not verify_password(decrypted_password, user.hashed_password):
         raise HTTPException(
@@ -137,7 +108,7 @@ async def login(request: Request, response: Response, user_credentials: UserLogi
     
     refresh_token = RefreshToken(
         user_id=user.id,
-        token=refresh_token_str,
+        token=hash_token(refresh_token_str),
         expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     )
     
@@ -162,7 +133,7 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
     
     result = await db.execute(
         select(RefreshToken).where(
-            RefreshToken.token == refresh_token,
+            RefreshToken.token == hash_token(refresh_token),
             RefreshToken.expires_at > datetime.utcnow()
         )
     )
@@ -197,7 +168,7 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
     
     new_refresh_token = RefreshToken(
         user_id=user.id,
-        token=new_refresh_token_str,
+        token=hash_token(new_refresh_token_str),
         expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     )
     
