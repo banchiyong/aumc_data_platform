@@ -39,6 +39,8 @@ export default async function StatisticsPage() {
     pending_approval: 0,
     recent_logins_7d: 0,
     recent_logins_30d: 0,
+    login_success_30d: 0,
+    login_failure_30d: 0,
   }
 
   return (
@@ -93,6 +95,8 @@ export default async function StatisticsPage() {
           <StatBox label="승인 대기" value={`${userStats.pending_approval}명`} />
           <StatBox label="최근 7일 로그인" value={`${userStats.recent_logins_7d}명`} />
           <StatBox label="최근 30일 로그인" value={`${userStats.recent_logins_30d}명`} />
+          <StatBox label="최근 30일 로그인 성공" value={`${userStats.login_success_30d}건`} />
+          <StatBox label="최근 30일 로그인 실패" value={`${userStats.login_failure_30d}건`} />
           <StatBox label="관리자" value={`${userStats.admins}명`} />
           <StatBox label="일반 사용자" value={`${userStats.researchers}명`} />
           <StatBox label="비활성 사용자" value={`${userStats.inactive}명`} />

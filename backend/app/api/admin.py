@@ -16,6 +16,7 @@ from app.models import (
     AutomationRequest,
     AutomationRequestStatus,
     AutomationRequestLog,
+    UserLoginLog,
 )
 from app.schemas.user import User as UserSchema, UserUpdate
 from app.schemas.application import ApplicationDelete
@@ -172,17 +173,33 @@ async def get_statistics(
         select(func.count(User.id)).where(User.dcyn == 'N', User.is_active == False)
     )
     recent_logins_7d = await db.execute(
-        select(func.count(User.id)).where(
-            User.dcyn == 'N',
-            User.last_login_at.isnot(None),
-            User.last_login_at >= datetime.utcnow() - timedelta(days=7),
+        select(func.count(func.distinct(UserLoginLog.user_id))).where(
+            UserLoginLog.dcyn == 'N',
+            UserLoginLog.success == True,
+            UserLoginLog.user_id.isnot(None),
+            UserLoginLog.created_at >= now_utc - timedelta(days=7),
         )
     )
     recent_logins_30d = await db.execute(
-        select(func.count(User.id)).where(
-            User.dcyn == 'N',
-            User.last_login_at.isnot(None),
-            User.last_login_at >= datetime.utcnow() - timedelta(days=30),
+        select(func.count(func.distinct(UserLoginLog.user_id))).where(
+            UserLoginLog.dcyn == 'N',
+            UserLoginLog.success == True,
+            UserLoginLog.user_id.isnot(None),
+            UserLoginLog.created_at >= now_utc - timedelta(days=30),
+        )
+    )
+    login_success_30d = await db.execute(
+        select(func.count(UserLoginLog.id)).where(
+            UserLoginLog.dcyn == 'N',
+            UserLoginLog.success == True,
+            UserLoginLog.created_at >= now_utc - timedelta(days=30),
+        )
+    )
+    login_failure_30d = await db.execute(
+        select(func.count(UserLoginLog.id)).where(
+            UserLoginLog.dcyn == 'N',
+            UserLoginLog.success == False,
+            UserLoginLog.created_at >= now_utc - timedelta(days=30),
         )
     )
 
@@ -297,6 +314,8 @@ async def get_statistics(
     pending_users_count = pending_users.scalar() or 0
     recent_logins_7d_count = recent_logins_7d.scalar() or 0
     recent_logins_30d_count = recent_logins_30d.scalar() or 0
+    login_success_30d_count = login_success_30d.scalar() or 0
+    login_failure_30d_count = login_failure_30d.scalar() or 0
     total_applications_count = total_applications.scalar() or 0
     recent_applications_count = recent_applications.scalar() or 0
     total_automation_count = total_automation.scalar() or 0
@@ -344,6 +363,8 @@ async def get_statistics(
             "pending_approval": pending_users_count,
             "recent_logins_7d": recent_logins_7d_count,
             "recent_logins_30d": recent_logins_30d_count,
+            "login_success_30d": login_success_30d_count,
+            "login_failure_30d": login_failure_30d_count,
         },
     }
 
