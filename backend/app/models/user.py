@@ -26,6 +26,7 @@ class User(BaseModel):
     applications = relationship("Application", back_populates="user", foreign_keys="Application.user_id")
     reviewed_applications = relationship("Application", back_populates="reviewer", foreign_keys="Application.reviewed_by")
     logs = relationship("ApplicationLog", back_populates="user")
+    login_logs = relationship("UserLoginLog", back_populates="user")
     downloads = relationship("Download", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user")
     password_reset_tokens = relationship("PasswordResetToken", back_populates="user")

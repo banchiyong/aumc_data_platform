@@ -10,6 +10,7 @@ from app.core.rate_limit import auth_limit, password_reset_limit
 from app.core.crypto import decrypt_password
 from app.models.user import User
 from app.models.token import RefreshToken
+from app.models.user_login_log import UserLoginLog
 from app.schemas.user import UserCreate, UserLogin, User as UserSchema
 from app.schemas.token import Token
 from app.core.config import settings
@@ -22,6 +23,32 @@ def decode_or_passthrough(value: str) -> str:
         return decrypt_password(value)
     except Exception:
         return value
+
+
+async def create_login_log(
+    *,
+    db: AsyncSession,
+    email: str,
+    request: Request,
+    success: bool,
+    user_id: str | None = None,
+    failure_reason: str | None = None,
+) -> None:
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    client_host = request.client.host if request.client else None
+    ip_address = forwarded_for.split(",")[0].strip() if forwarded_for else client_host
+
+    db.add(
+        UserLoginLog(
+            user_id=user_id,
+            email=email,
+            success=success,
+            ip_address=ip_address,
+            user_agent=request.headers.get("user-agent"),
+            failure_reason=failure_reason,
+        )
+    )
+    await db.commit()
 
 
 @router.post("/register", response_model=UserSchema)
@@ -89,6 +116,14 @@ async def login(request: Request, response: Response, user_credentials: UserLogi
     decrypted_password = decode_or_passthrough(user_credentials.password)
     
     if not user or not verify_password(decrypted_password, user.hashed_password):
+        await create_login_log(
+            db=db,
+            email=decrypted_email,
+            request=request,
+            success=False,
+            user_id=user.id if user else None,
+            failure_reason="INVALID_CREDENTIALS",
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="이메일 또는 비밀번호가 올바르지 않습니다",
@@ -96,6 +131,14 @@ async def login(request: Request, response: Response, user_credentials: UserLogi
         )
     
     if not user.is_active:
+        await create_login_log(
+            db=db,
+            email=decrypted_email,
+            request=request,
+            success=False,
+            user_id=user.id,
+            failure_reason="INACTIVE_USER",
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="비활성화된 계정입니다"
@@ -114,6 +157,14 @@ async def login(request: Request, response: Response, user_credentials: UserLogi
     
     db.add(refresh_token)
     await db.commit()
+
+    await create_login_log(
+        db=db,
+        email=decrypted_email,
+        request=request,
+        success=True,
+        user_id=user.id,
+    )
     
     return Token(
         access_token=access_token,

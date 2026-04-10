@@ -12,6 +12,7 @@ from app.models.log import ApplicationLog, LogAction
 from app.models.download import Download
 from app.models.token import RefreshToken
 from app.models.password_reset import PasswordResetToken
+from app.models.user_login_log import UserLoginLog
 
 __all__ = [
     "User",
@@ -30,4 +31,5 @@ __all__ = [
     "Download",
     "RefreshToken",
     "PasswordResetToken",
+    "UserLoginLog",
 ]
