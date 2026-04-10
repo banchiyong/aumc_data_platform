@@ -5,20 +5,22 @@ const API_BASE_URL = process.env.BACKEND_URL || 'http://localhost:10402'
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const accessToken = cookieStore.get('access_token')
 
   if (!accessToken) {
     return new NextResponse('Unauthorized', { status: 401 })
   }
 
+  const { id } = await params
+
   try {
     const body = await request.json()
     
     const response = await fetch(
-      `${API_BASE_URL}/api/applications/${params.id}`,
+      `${API_BASE_URL}/api/applications/${id}`,
       {
         method: 'PUT',
         headers: {

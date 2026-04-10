@@ -6,7 +6,16 @@ from datetime import datetime, timedelta
 
 from app.db.session import get_db
 from app.core.deps import get_current_admin_user
-from app.models import User, UserRole, Application, ApplicationStatus, ApplicationLog, LogAction
+from app.models import (
+    User,
+    UserRole,
+    Application,
+    ApplicationStatus,
+    ApplicationLog,
+    LogAction,
+    AutomationRequest,
+    AutomationRequestLog,
+)
 from app.schemas.user import User as UserSchema, UserUpdate
 from app.schemas.application import ApplicationDelete
 

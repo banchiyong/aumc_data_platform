@@ -75,7 +75,8 @@ async def register(
         name=user_in.name,
         department=user_in.department,
         position=user_in.position,
-        phone=user_in.phone
+        phone=user_in.phone,
+        is_active=False,
     )
     
     db.add(user)

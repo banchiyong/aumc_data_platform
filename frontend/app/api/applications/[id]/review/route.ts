@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const accessToken = cookieStore.get('access_token')
 
   if (!accessToken) {
@@ -13,7 +13,7 @@ export async function POST(
   }
 
   const API_BASE_URL = process.env.BACKEND_URL || 'http://localhost:10402'
-  const { id } = params
+  const { id } = await params
 
   try {
     const body = await request.json()

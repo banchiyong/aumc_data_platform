@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -64,6 +64,8 @@ export default function AdminApplicationsTable({
   const [includeDeleted, setIncludeDeleted] = useState(initialIncludeDeleted)
   const [sortField, setSortField] = useState<SortField>('submitted_at')
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<string | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
@@ -130,6 +132,16 @@ export default function AdminApplicationsTable({
       return 0
     })
   }, [filteredApplications, sortField, sortDirection])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, statusFilter, sortField, sortDirection, includeDeleted])
+
+  const totalPages = Math.max(1, Math.ceil(sortedApplications.length / itemsPerPage))
+  const paginatedApplications = sortedApplications.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  )
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -253,6 +265,9 @@ export default function AdminApplicationsTable({
         <p className="text-sm text-gray-600">
           전체 {applications.length}건 중 {sortedApplications.length}건 표시
         </p>
+        <p className="text-sm text-gray-600">
+          {currentPage} / {totalPages} 페이지
+        </p>
       </div>
 
       {/* 테이블 */}
@@ -329,7 +344,7 @@ export default function AdminApplicationsTable({
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedApplications.map((app: Application) => {
+                  {paginatedApplications.map((app: Application) => {
                     const isDeleted = app.dcyn === 'Y'
                     return (
                     <tr 
@@ -478,6 +493,30 @@ export default function AdminApplicationsTable({
           )}
         </CardContent>
       </Card>
+
+      {sortedApplications.length > 0 && (
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+            disabled={currentPage === 1}
+          >
+            이전
+          </Button>
+          <span className="text-sm text-gray-600">
+            {currentPage} / {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+            disabled={currentPage === totalPages}
+          >
+            다음
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

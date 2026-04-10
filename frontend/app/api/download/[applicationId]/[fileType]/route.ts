@@ -3,9 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { applicationId: string; fileType: string } }
+  { params }: { params: Promise<{ applicationId: string; fileType: string }> }
 ) {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const accessToken = cookieStore.get('access_token')
 
   if (!accessToken) {
@@ -13,7 +13,7 @@ export async function GET(
   }
 
   const API_BASE_URL = process.env.BACKEND_URL || 'http://localhost:10402'
-  const { applicationId, fileType } = params
+  const { applicationId, fileType } = await params
 
   try {
     // 백엔드에서 파일 다운로드

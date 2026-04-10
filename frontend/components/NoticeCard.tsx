@@ -3,7 +3,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle, Info, Settings, Tool, ChevronDown, ChevronUp, Pin } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { AlertTriangle, Info, Settings, Wrench, Pin } from 'lucide-react'
 import { useState } from 'react'
 
 interface Notice {
@@ -15,26 +16,17 @@ interface Notice {
   is_active: boolean
   created_at: string
   author_name: string
-  start_date?: string
-  end_date?: string
 }
 
 interface NoticeCardProps {
   notices: Notice[]
+  embedded?: boolean
 }
 
-export default function NoticeCard({ notices }: NoticeCardProps) {
-  const [expandedNotices, setExpandedNotices] = useState<Set<string>>(new Set())
-
-  const toggleExpanded = (noticeId: string) => {
-    const newExpanded = new Set(expandedNotices)
-    if (newExpanded.has(noticeId)) {
-      newExpanded.delete(noticeId)
-    } else {
-      newExpanded.add(noticeId)
-    }
-    setExpandedNotices(newExpanded)
-  }
+export default function NoticeCard({ notices, embedded = false }: NoticeCardProps) {
+  const [selectedNoticeId, setSelectedNoticeId] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 4
 
   const getNoticeIcon = (type: string) => {
     switch (type) {
@@ -43,7 +35,7 @@ export default function NoticeCard({ notices }: NoticeCardProps) {
       case 'SYSTEM':
         return <Settings className="h-4 w-4" />
       case 'MAINTENANCE':
-        return <Tool className="h-4 w-4" />
+        return <Wrench className="h-4 w-4" />
       default:
         return <Info className="h-4 w-4" />
     }
@@ -62,28 +54,157 @@ export default function NoticeCard({ notices }: NoticeCardProps) {
     }
   }
 
-  const activeNotices = notices.filter(notice => {
-    if (!notice.is_active) return false
-    
-    const now = new Date()
-    const startDate = notice.start_date ? new Date(notice.start_date) : null
-    const endDate = notice.end_date ? new Date(notice.end_date) : null
-    
-    if (startDate && now < startDate) return false
-    if (endDate && now > endDate) return false
-    
-    return true
-  })
+  const activeNotices = notices.filter((notice) => notice.is_active)
 
   // 고정 공지를 상단에 표시
   const sortedNotices = [...activeNotices].sort((a, b) => {
-    if (a.is_pinned && !b.is_pinned) return -1
-    if (!a.is_pinned && b.is_pinned) return 1
+    if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   })
 
+  const totalPages = Math.max(1, Math.ceil(sortedNotices.length / itemsPerPage))
+  const paginatedNotices = sortedNotices.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+  const selectedNotice = sortedNotices.find((notice) => notice.id === selectedNoticeId) ?? null
+
   if (sortedNotices.length === 0) {
+    if (embedded) {
+      return (
+        <div className="py-8 text-center text-sm text-gray-500">
+          등록된 공지사항이 없습니다.
+        </div>
+      )
+    }
     return null
+  }
+
+  const content = (
+    <div className="space-y-4">
+      {paginatedNotices.map((notice) => {
+        const typeInfo = getNoticeTypeInfo(notice.notice_type)
+        
+        return (
+          <button
+            key={notice.id}
+            type="button"
+            onClick={() => setSelectedNoticeId(notice.id)}
+            className="w-full rounded-lg border p-4 text-left transition-colors hover:bg-gray-50"
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <div className="mb-2 flex items-center gap-2">
+                  {notice.is_pinned && (
+                    <Pin className="h-4 w-4 text-blue-600" />
+                  )}
+                  {getNoticeIcon(notice.notice_type)}
+                  <Badge variant={typeInfo.variant} className="inline-flex w-12 justify-center">
+                    {typeInfo.label}
+                  </Badge>
+                  <span className="text-sm text-gray-500">
+                    {new Date(notice.created_at).toLocaleDateString('ko-KR')}
+                  </span>
+                  <span className="text-sm text-gray-500">
+                    by {notice.author_name}
+                  </span>
+                </div>
+                <h4 className="mb-2 font-medium text-gray-900">
+                  {notice.title}
+                </h4>
+                <div className="line-clamp-2 text-sm text-gray-600">
+                  {notice.content.length > 100
+                    ? `${notice.content.substring(0, 100)}...`
+                    : notice.content
+                  }
+                </div>
+              </div>
+            </div>
+          </button>
+        )
+      })}
+
+      {sortedNotices.length > itemsPerPage && (
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+            disabled={currentPage === 1}
+          >
+            이전
+          </Button>
+          <span className="text-sm text-gray-600">
+            {currentPage} / {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+            disabled={currentPage === totalPages}
+          >
+            다음
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+
+  if (embedded) {
+    return (
+      <div className="space-y-4">
+        <div className="divide-y divide-slate-200">
+          {paginatedNotices.map((notice) => {
+            const typeInfo = getNoticeTypeInfo(notice.notice_type)
+
+            return (
+              <button
+                key={notice.id}
+                type="button"
+                onClick={() => setSelectedNoticeId(notice.id)}
+                className="grid w-full grid-cols-[1fr_auto] items-center gap-3 px-0 py-3 text-left text-slate-600"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={typeInfo.variant} className="inline-flex w-14 justify-center">
+                      {typeInfo.label}
+                    </Badge>
+                    {notice.is_pinned && <Pin className="h-3.5 w-3.5 text-blue-600" />}
+                    <span className="truncate text-left text-sm font-medium">{notice.title}</span>
+                  </div>
+                </div>
+                <div className="text-xs text-slate-500">
+                  <span>{new Date(notice.created_at).toLocaleDateString('ko-KR')}</span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        {sortedNotices.length > itemsPerPage && (
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={currentPage === 1}
+            >
+              이전
+            </Button>
+            <span className="text-sm text-gray-600">
+              {currentPage} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={currentPage === totalPages}
+            >
+              다음
+            </Button>
+          </div>
+        )}
+
+        <NoticeDialog notice={selectedNotice} onOpenChange={(open) => !open && setSelectedNoticeId(null)} />
+      </div>
+    )
   }
 
   return (
@@ -98,71 +219,41 @@ export default function NoticeCard({ notices }: NoticeCardProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="space-y-4">
-          {sortedNotices.map((notice) => {
-            const isExpanded = expandedNotices.has(notice.id)
-            const typeInfo = getNoticeTypeInfo(notice.notice_type)
-            
-            return (
-              <div
-                key={notice.id}
-                className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      {notice.is_pinned && (
-                        <Pin className="h-4 w-4 text-blue-600" />
-                      )}
-                      {getNoticeIcon(notice.notice_type)}
-                      <Badge variant={typeInfo.variant}>
-                        {typeInfo.label}
-                      </Badge>
-                      <span className="text-sm text-gray-500">
-                        {new Date(notice.created_at).toLocaleDateString('ko-KR')}
-                      </span>
-                      <span className="text-sm text-gray-500">
-                        by {notice.author_name}
-                      </span>
-                    </div>
-                    <h4 className="font-medium text-gray-900 mb-2">
-                      {notice.title}
-                    </h4>
-                    
-                    {isExpanded ? (
-                      <div className="text-sm text-gray-700 whitespace-pre-wrap">
-                        {notice.content}
-                      </div>
-                    ) : (
-                      <div className="text-sm text-gray-600 line-clamp-2">
-                        {notice.content.length > 100
-                          ? `${notice.content.substring(0, 100)}...`
-                          : notice.content
-                        }
-                      </div>
-                    )}
-                  </div>
-                  
-                  {notice.content.length > 100 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleExpanded(notice.id)}
-                      className="ml-2"
-                    >
-                      {isExpanded ? (
-                        <ChevronUp className="h-4 w-4" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4" />
-                      )}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        {content}
+        <NoticeDialog notice={selectedNotice} onOpenChange={(open) => !open && setSelectedNoticeId(null)} />
       </CardContent>
     </Card>
+  )
+}
+
+function NoticeDialog({
+  notice,
+  onOpenChange,
+}: {
+  notice: Notice | null
+  onOpenChange: (open: boolean) => void
+}) {
+  return (
+    <Dialog open={!!notice} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        {notice && (
+          <>
+            <DialogHeader>
+              <div className="mb-2 flex items-center gap-2">
+                {notice.is_pinned && <Pin className="h-4 w-4 text-blue-600" />}
+                <span className="text-xs text-gray-500">
+                  {new Date(notice.created_at).toLocaleString('ko-KR')}
+                </span>
+                <span className="text-xs text-gray-500">by {notice.author_name}</span>
+              </div>
+              <DialogTitle>{notice.title}</DialogTitle>
+            </DialogHeader>
+            <div className="whitespace-pre-wrap text-sm leading-6 text-gray-700">
+              {notice.content}
+            </div>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }

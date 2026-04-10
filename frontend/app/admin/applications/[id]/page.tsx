@@ -8,15 +8,18 @@ import { ArrowLeft, User, FileText, Calendar, Phone, Mail, Building, Download } 
 import ReviewForm from './ReviewForm'
 import StatusUpdateForm from './StatusUpdateForm'
 import DownloadButton from '@/app/researcher/applications/[id]/DownloadButton'
+import { HistoryTimeline } from '@/components/history-timeline'
 
 interface AdminApplicationDetailPageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export default async function AdminApplicationDetailPage({ params }: AdminApplicationDetailPageProps) {
-  const response = await api.applications.get(params.id)
+  const { id } = await params
+  const response = await api.applications.get(id)
+  const historyResponse = await api.applications.history(id)
   
   if (response.error) {
     return (
@@ -42,6 +45,7 @@ export default async function AdminApplicationDetailPage({ params }: AdminApplic
   }
 
   const application = response.data
+  const historyItems = historyResponse.data || []
   
   return (
     <div className="space-y-6">
@@ -189,7 +193,7 @@ export default async function AdminApplicationDetailPage({ params }: AdminApplic
                 </div>
                 {application.irb_document_path && (
                   <DownloadButton
-                    applicationId={params.id}
+                    applicationId={id}
                     fileType="irb"
                     label="다운로드"
                   />
@@ -214,12 +218,21 @@ export default async function AdminApplicationDetailPage({ params }: AdminApplic
                 </div>
                 {application.research_plan_path && (
                   <DownloadButton
-                    applicationId={params.id}
+                    applicationId={id}
                     fileType="research-plan"
                     label="다운로드"
                   />
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>신청 관리 이력</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <HistoryTimeline items={historyItems} emptyMessage="등록된 신청 이력이 없습니다." />
             </CardContent>
           </Card>
         </div>
@@ -310,13 +323,13 @@ export default async function AdminApplicationDetailPage({ params }: AdminApplic
 
           {/* 검토 양식 */}
           {(application.status === 'SUBMITTED' || application.status === 'UNDER_REVIEW') && (
-            <ReviewForm applicationId={params.id} />
+            <ReviewForm applicationId={id} />
           )}
 
           {/* 상태 변경 양식 */}
           {(application.status === 'APPROVED' || application.status === 'PROCESSING') && (
             <StatusUpdateForm 
-              applicationId={params.id} 
+              applicationId={id} 
               currentStatus={application.status}
             />
           )}

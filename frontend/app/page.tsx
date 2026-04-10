@@ -9,7 +9,7 @@ export default async function HomePage() {
     const userResponse = await api.auth.me()
     if (userResponse.data) {
       // Redirect to appropriate dashboard based on role
-      const redirectPath = userResponse.data.role === 'ADMIN' ? '/admin' : '/researcher'
+      const redirectPath = userResponse.data.role === 'ADMIN' ? '/admin' : '/main'
       redirect(redirectPath)
     }
   } catch (error) {

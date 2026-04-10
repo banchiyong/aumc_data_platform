@@ -7,13 +7,14 @@ import { redirect } from 'next/navigation'
 import MultiStepEditForm from './MultiStepEditForm'
 
 interface ApplicationEditPageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export default async function ApplicationEditPage({ params }: ApplicationEditPageProps) {
-  const response = await api.applications.get(params.id)
+  const { id } = await params
+  const response = await api.applications.get(id)
   
   if (response.error) {
     redirect('/researcher/applications')
@@ -23,7 +24,7 @@ export default async function ApplicationEditPage({ params }: ApplicationEditPag
   
   // 수정 가능한 상태가 아니면 상세 페이지로 리다이렉트
   if (application.status !== 'DRAFT' && application.status !== 'REVISION_REQUESTED') {
-    redirect(`/researcher/applications/${params.id}`)
+    redirect(`/researcher/applications/${id}`)
   }
 
   // 사용자 정보 가져오기
@@ -36,7 +37,7 @@ export default async function ApplicationEditPage({ params }: ApplicationEditPag
   return (
     <div className="space-y-6">
       <div className="flex items-center space-x-4">
-        <Link href={`/researcher/applications/${params.id}`}>
+        <Link href={`/researcher/applications/${id}`}>
           <Button variant="ghost" size="sm">
             <ArrowLeft className="h-4 w-4 mr-2" />
             돌아가기

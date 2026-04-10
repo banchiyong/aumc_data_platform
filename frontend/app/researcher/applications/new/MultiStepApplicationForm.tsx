@@ -64,6 +64,29 @@ export default function MultiStepApplicationForm({ userData }: MultiStepApplicat
     }
   }
 
+  const getMissingBasicFields = () => {
+    const missingFields: string[] = []
+
+    if (!formData.project_name) missingFields.push('연구과제명')
+    if (!formData.applicant_name) missingFields.push('신청자명')
+    if (!formData.applicant_email) missingFields.push('신청자 이메일')
+    if (!formData.applicant_phone) missingFields.push('신청자 연락처')
+    if (!formData.principal_investigator) missingFields.push('책임연구자')
+    if (!formData.pi_department) missingFields.push('책임연구자 소속')
+    if (!formData.irb_number) missingFields.push('IRB 승인번호')
+
+    return missingFields
+  }
+
+  const getMissingAttachmentFields = () => {
+    const missingAttachments: string[] = []
+
+    if (!files.irb_document) missingAttachments.push('IRB 통지서')
+    if (!files.research_plan) missingAttachments.push('연구계획서')
+
+    return missingAttachments
+  }
+
   const getStepValidationMessage = (step: Step): string | null => {
     switch (step) {
       case 1:
@@ -94,6 +117,10 @@ export default function MultiStepApplicationForm({ userData }: MultiStepApplicat
         }
         return null
       case 3:
+        const missingAttachments = getMissingAttachmentFields()
+        if (missingAttachments.length > 0) {
+          return `첨부파일 필수 항목을 모두 제출해주세요: ${missingAttachments.join(', ')}`
+        }
       case 4:
         return null
       default:
@@ -179,9 +206,15 @@ export default function MultiStepApplicationForm({ userData }: MultiStepApplicat
   }
 
   const validateAllSteps = (): boolean => {
-    // 제출 시에는 1, 2단계만 필수 검증 (3단계 첨부파일은 선택사항)
-    return validateStep(1) && validateStep(2)
+    return validateStep(1) && validateStep(2) && validateStep(3)
   }
+
+  const submissionChecklist = [
+    { label: '기본 정보 필수 항목 입력', completed: !getStepValidationMessage(1) },
+    { label: '데이터 요청 필수 항목 입력', completed: !getStepValidationMessage(2) },
+    { label: 'IRB 통지서 첨부', completed: !!files.irb_document },
+    { label: '연구계획서 첨부', completed: !!files.research_plan },
+  ]
 
   const handleStepClick = (targetStep: Step) => {
     setCurrentStep(targetStep)
@@ -263,6 +296,28 @@ export default function MultiStepApplicationForm({ userData }: MultiStepApplicat
     setLoading(false)
   }
 
+  const handleFinalSubmit = async () => {
+    const missingBasicFields = getMissingBasicFields()
+
+    if (missingBasicFields.length > 0) {
+      setError(`기본 정보의 필수 항목을 모두 입력해주세요: ${missingBasicFields.join(', ')}`)
+      return
+    }
+
+    if (getStepValidationMessage(2)) {
+      setError(getStepValidationMessage(2) || '')
+      return
+    }
+
+    const missingAttachments = getMissingAttachmentFields()
+    if (missingAttachments.length > 0) {
+      setError(`첨부파일 필수 항목을 모두 제출해주세요: ${missingAttachments.join(', ')}`)
+      return
+    }
+
+    await handleSubmit(false)
+  }
+
   const renderStepContent = () => {
     switch (currentStep) {
       case 1:
@@ -272,7 +327,7 @@ export default function MultiStepApplicationForm({ userData }: MultiStepApplicat
       case 3:
         return <AttachmentsStep files={files} handleFileChange={handleFileChange} />
       case 4:
-        return <ReviewStep formData={formData} files={files} />
+        return <ReviewStep formData={formData} files={files} checklist={submissionChecklist} />
     }
   }
 
@@ -401,7 +456,7 @@ export default function MultiStepApplicationForm({ userData }: MultiStepApplicat
               <ChevronRight className="h-4 w-4 ml-2" />
             </Button>
           ) : (
-            <Button onClick={() => handleSubmit(false)} disabled={loading}>
+            <Button onClick={handleFinalSubmit} disabled={loading}>
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -616,7 +671,7 @@ function AttachmentsStep({ files, handleFileChange }: any) {
   return (
     <div className="space-y-6">
       <div>
-        <Label className="text-base font-medium mb-3 block">IRB 통지서</Label>
+        <Label className="text-base font-medium mb-3 block">IRB 통지서 *</Label>
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
           <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
           <input
@@ -637,7 +692,7 @@ function AttachmentsStep({ files, handleFileChange }: any) {
       </div>
 
       <div>
-        <Label className="text-base font-medium mb-3 block">연구계획서</Label>
+        <Label className="text-base font-medium mb-3 block">연구계획서 *</Label>
         <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
           <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
           <input
@@ -660,13 +715,13 @@ function AttachmentsStep({ files, handleFileChange }: any) {
       <div className="text-sm text-gray-500 space-y-1">
         <p>• 지원 파일 형식: PDF, DOC, DOCX, HWP</p>
         <p>• 최대 파일 크기: 10MB</p>
-        <p>• 첨부파일은 선택사항입니다</p>
+        <p>• IRB 통지서와 연구계획서는 제출 필수 항목입니다</p>
       </div>
     </div>
   )
 }
 
-function ReviewStep({ formData, files }: any) {
+function ReviewStep({ formData, files, checklist }: any) {
   return (
     <div className="space-y-6">
       <div>
@@ -719,8 +774,12 @@ function ReviewStep({ formData, files }: any) {
 
       <div className="bg-blue-50 p-4 rounded-lg">
         <h4 className="font-semibold text-blue-900 mb-2">제출 전 확인사항</h4>
-        <ul className="text-sm text-blue-800 space-y-1">
-          <li>• 입력한 모든 정보가 정확한지 확인하세요</li>
+        <ul className="text-sm text-blue-800 space-y-2">
+          {checklist.map((item: { label: string; completed: boolean }) => (
+            <li key={item.label} className={item.completed ? '' : 'font-semibold text-red-700'}>
+              • {item.label} {item.completed ? '완료' : '미비'}
+            </li>
+          ))}
           <li>• 제출 후에는 관리자 승인 전까지 수정이 제한됩니다</li>
           <li>• 검토 결과는 이메일로 통보됩니다</li>
         </ul>

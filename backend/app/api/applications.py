@@ -22,6 +22,7 @@ from app.schemas.application import (
     ApplicationWithUser,
     ApplicationListItem
 )
+from app.schemas.history import HistoryItem
 
 router = APIRouter(prefix="/api/applications", tags=["applications"])
 
@@ -31,6 +32,30 @@ KST = timezone(timedelta(hours=9))
 def get_korean_time() -> datetime:
     """한국 표준시 기준 현재 시간 반환"""
     return datetime.now(KST)
+
+
+def serialize_for_history(value):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if hasattr(value, "value"):
+        return value.value
+    if isinstance(value, list):
+        return [serialize_for_history(item) for item in value]
+    if isinstance(value, dict):
+        return {key: serialize_for_history(val) for key, val in value.items()}
+    return value
+
+
+def build_change_details(before: dict, after: dict) -> dict:
+    changes = {}
+    for key, before_value in before.items():
+        after_value = after.get(key)
+        if serialize_for_history(before_value) != serialize_for_history(after_value):
+            changes[key] = {
+                "before": serialize_for_history(before_value),
+                "after": serialize_for_history(after_value),
+            }
+    return changes
 
 def get_safe_filename(original_filename: str, file_type: str) -> str:
     """안전한 파일명 생성"""
@@ -245,7 +270,16 @@ async def create_application(
     log = ApplicationLog(
         application_id=application.id,
         user_id=current_user.id,
-        action=LogAction.SUBMITTED if requested_status == ApplicationStatus.SUBMITTED else LogAction.CREATED
+        action=LogAction.SUBMITTED if requested_status == ApplicationStatus.SUBMITTED else LogAction.CREATED,
+        details={
+            "created_fields": {
+                "project_name": application.project_name,
+                "service_types": serialize_for_history(application.service_types),
+                "status": serialize_for_history(application.status),
+                "irb_document_original_name": application.irb_document_original_name,
+                "research_plan_original_name": application.research_plan_original_name,
+            }
+        },
     )
     db.add(log)
     await db.commit()
@@ -311,6 +345,46 @@ async def get_application(
     return response
 
 
+@router.get("/{application_id}/history", response_model=List[HistoryItem])
+async def get_application_history(
+    application_id: str,
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    application_result = await db.execute(
+        select(Application).where(Application.id == application_id, Application.dcyn == 'N')
+    )
+    application = application_result.scalar_one_or_none()
+
+    if not application:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
+
+    logs_result = await db.execute(
+        select(ApplicationLog).where(ApplicationLog.application_id == application_id).order_by(ApplicationLog.created_at.desc())
+    )
+    logs = logs_result.scalars().all()
+
+    items = []
+    for log in logs:
+        user_result = await db.execute(select(User).where(User.id == log.user_id, User.dcyn == 'N'))
+        user = user_result.scalar_one_or_none()
+        items.append(
+            HistoryItem(
+                id=log.id,
+                action=log.action.value if hasattr(log.action, "value") else str(log.action),
+                reason=log.reason,
+                details=log.details,
+                created_at=log.created_at,
+                user_id=log.user_id,
+                user_name=user.name if user else None,
+                subject_id=application.id,
+                subject_title=application.project_name,
+            )
+        )
+
+    return items
+
+
 @router.put("/{application_id}", response_model=ApplicationSchema)
 async def update_application(
     application_id: str,
@@ -340,14 +414,29 @@ async def update_application(
             detail="Cannot update application in current status"
         )
     
+    tracked_fields = [
+        "project_name",
+        "applicant_phone",
+        "principal_investigator",
+        "pi_department",
+        "irb_number",
+        "desired_completion_date",
+        "service_types",
+        "unstructured_data_type",
+        "target_patients",
+        "request_details",
+    ]
+    before_state = {field: getattr(application, field) for field in tracked_fields}
     update_data = application_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(application, field, value)
+    after_state = {field: getattr(application, field) for field in tracked_fields}
     
     log = ApplicationLog(
         application_id=application.id,
         user_id=current_user.id,
-        action=LogAction.UPDATED
+        action=LogAction.UPDATED,
+        details={"changes": build_change_details(before_state, after_state)},
     )
     db.add(log)
     
@@ -385,13 +474,20 @@ async def submit_application(
             detail="Cannot submit application in current status"
         )
     
+    before_status = application.status
     application.status = ApplicationStatus.SUBMITTED
     application.submitted_at = get_korean_time()
     
     log = ApplicationLog(
         application_id=application.id,
         user_id=current_user.id,
-        action=LogAction.SUBMITTED
+        action=LogAction.SUBMITTED,
+        details={
+            "status_change": {
+                "before": serialize_for_history(before_status),
+                "after": serialize_for_history(application.status),
+            }
+        },
     )
     db.add(log)
     
@@ -423,6 +519,11 @@ async def review_application(
             detail="Cannot review application in current status"
         )
     
+    before_state = {
+        "status": application.status,
+        "rejection_reason": application.rejection_reason,
+        "revision_request_reason": application.revision_request_reason,
+    }
     application.status = review.status
     application.reviewed_at = get_korean_time()
     application.reviewed_by = current_user.id
@@ -442,7 +543,17 @@ async def review_application(
         application_id=application.id,
         user_id=current_user.id,
         action=action,
-        reason=review.reason
+        reason=review.reason,
+        details={
+            "changes": build_change_details(
+                before_state,
+                {
+                    "status": application.status,
+                    "rejection_reason": application.rejection_reason,
+                    "revision_request_reason": application.revision_request_reason,
+                },
+            )
+        },
     )
     db.add(log)
     
@@ -487,8 +598,24 @@ async def upload_irb_document(
         file_info = save_uploaded_file(file, application_id, "irb")
         
         # DB 업데이트
+        before_file = application.irb_document_original_name
         application.irb_document_path = file_info["file_path"]
         application.irb_document_original_name = file_info["original_filename"]
+        db.add(
+            ApplicationLog(
+                application_id=application.id,
+                user_id=current_user.id,
+                action=LogAction.UPDATED,
+                details={
+                    "changes": {
+                        "irb_document_original_name": {
+                            "before": before_file,
+                            "after": application.irb_document_original_name,
+                        }
+                    }
+                },
+            )
+        )
         await db.commit()
         
         return {
@@ -540,8 +667,24 @@ async def upload_research_plan(
         file_info = save_uploaded_file(file, application_id, "research_plan")
         
         # DB 업데이트
+        before_file = application.research_plan_original_name
         application.research_plan_path = file_info["file_path"]
         application.research_plan_original_name = file_info["original_filename"]
+        db.add(
+            ApplicationLog(
+                application_id=application.id,
+                user_id=current_user.id,
+                action=LogAction.UPDATED,
+                details={
+                    "changes": {
+                        "research_plan_original_name": {
+                            "before": before_file,
+                            "after": application.research_plan_original_name,
+                        }
+                    }
+                },
+            )
+        )
         await db.commit()
         
         return {
@@ -591,9 +734,11 @@ async def delete_file(
     
     # 파일 경로를 null로 설정 (물리적 파일은 유지)
     if file_type == "irb":
+        before_file = application.irb_document_original_name
         application.irb_document_path = None
         application.irb_document_original_name = None
     elif file_type == "research-plan":
+        before_file = application.research_plan_original_name
         application.research_plan_path = None
         application.research_plan_original_name = None
     else:
@@ -607,7 +752,15 @@ async def delete_file(
         application_id=application.id,
         user_id=current_user.id,
         action=LogAction.UPDATED,
-        reason=f"{file_type} 파일 삭제"
+        reason=f"{file_type} 파일 삭제",
+        details={
+            "changes": {
+                f"{file_type}_file": {
+                    "before": before_file,
+                    "after": None,
+                }
+            }
+        },
     )
     db.add(log)
     
@@ -759,9 +912,13 @@ async def update_application_status(
         user_id=current_user.id,
         action=log_action,
         details={
-            "old_status": old_status.value,
-            "new_status": new_status_enum.value,
-            "changed_by_admin": True
+            "changes": {
+                "status": {
+                    "before": old_status.value,
+                    "after": new_status_enum.value,
+                }
+            },
+            "changed_by_admin": True,
         }
     )
     db.add(log)

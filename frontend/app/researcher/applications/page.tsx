@@ -14,17 +14,17 @@ export default async function ApplicationsListPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900">내 신청 목록</h1>
+        <h1 className="text-3xl font-bold text-gray-900">데이터 서비스 신청 목록</h1>
         <Link href="/researcher/applications/new">
-          <Button>새 신청서 작성</Button>
+          <Button>데이터 서비스 신청</Button>
         </Link>
       </div>
       
       <Card>
         <CardHeader>
-          <CardTitle>신청 내역</CardTitle>
+          <CardTitle>데이터 서비스 신청 내역</CardTitle>
           <CardDescription>
-            데이터 추출·가공 서비스 신청 내역을 확인하고 관리할 수 있습니다
+            데이터 서비스 신청 내역을 확인하고 관리할 수 있습니다
           </CardDescription>
         </CardHeader>
         <CardContent>

@@ -67,7 +67,7 @@ export async function loginAction(formData: FormData) {
     });
 
     const user = await userResponse.json();
-    const redirectPath = user.role === 'ADMIN' ? '/admin' : '/researcher';
+    const redirectPath = user.role === 'ADMIN' ? '/admin' : '/main';
 
     return { success: true, redirectPath }
   } catch (error) {
@@ -165,6 +165,90 @@ export async function createApplicationAction(formData: FormData) {
     return {
       success: false,
       error: error instanceof Error ? error.message : '신청서 제출에 실패했습니다',
+    }
+  }
+}
+
+export async function createAutomationRequestAction(formData: FormData) {
+  const cookieStore = await cookies()
+  const accessToken = cookieStore.get('access_token')?.value
+
+  if (!accessToken) {
+    return {
+      success: false,
+      error: '로그인이 필요합니다',
+    }
+  }
+
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/automation-requests/`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: '자동화 서비스 신청에 실패했습니다' }))
+      return {
+        success: false,
+        error: error.detail || '자동화 서비스 신청에 실패했습니다',
+      }
+    }
+
+    const automationRequest = await response.json()
+    return {
+      success: true,
+      data: automationRequest,
+    }
+  } catch (error) {
+    console.error('Create automation request action error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '자동화 서비스 신청에 실패했습니다',
+    }
+  }
+}
+
+export async function updateAutomationRequestAction(requestId: string, formData: FormData) {
+  const cookieStore = await cookies()
+  const accessToken = cookieStore.get('access_token')?.value
+
+  if (!accessToken) {
+    return {
+      success: false,
+      error: '로그인이 필요합니다',
+    }
+  }
+
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/automation-requests/${requestId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: '자동화 서비스 수정에 실패했습니다' }))
+      return {
+        success: false,
+        error: error.detail || '자동화 서비스 수정에 실패했습니다',
+      }
+    }
+
+    const automationRequest = await response.json()
+    return {
+      success: true,
+      data: automationRequest,
+    }
+  } catch (error) {
+    console.error('Update automation request action error:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '자동화 서비스 수정에 실패했습니다',
     }
   }
 }

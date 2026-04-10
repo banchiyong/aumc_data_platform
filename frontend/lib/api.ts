@@ -6,6 +6,19 @@ interface ApiOptions extends RequestInit {
   auth?: boolean;
 }
 
+function withQuery(endpoint: string, params?: Record<string, string | number | boolean | undefined>) {
+  if (!params) return endpoint
+
+  const query = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      query.set(key, String(value))
+    }
+  })
+
+  return query.toString() ? `${endpoint}?${query.toString()}` : endpoint
+}
+
 async function fetchAPI(endpoint: string, options: ApiOptions = {}) {
   const { auth = false, ...fetchOptions } = options;
 
@@ -49,9 +62,9 @@ export const api = {
   },
 
   applications: {
-    async list() {
+    async list(params?: Record<string, string | number | boolean | undefined>) {
       try {
-        const data = await fetchAPI('/api/applications', { auth: true });
+        const data = await fetchAPI(withQuery('/api/applications', params), { auth: true });
         return { data };
       } catch (error) {
         return { data: [] };
@@ -100,6 +113,58 @@ export const api = {
         auth: true,
       });
     },
+
+    async history(id: string) {
+      try {
+        const data = await fetchAPI(`/api/applications/${id}/history`, { auth: true })
+        return { data }
+      } catch (error) {
+        return { data: [] }
+      }
+    },
+  },
+
+  automationRequests: {
+    async list() {
+      try {
+        const data = await fetchAPI('/api/automation-requests', { auth: true })
+        return { data }
+      } catch (error) {
+        return { data: [] }
+      }
+    },
+
+    async get(id: string) {
+      try {
+        const data = await fetchAPI(`/api/automation-requests/${id}`, { auth: true })
+        return { data }
+      } catch (error) {
+        return {
+          data: null,
+          error: error instanceof Error ? error.message : '자동화 서비스 요청을 불러오지 못했습니다',
+        }
+      }
+    },
+
+    async history(id: string) {
+      try {
+        const data = await fetchAPI(`/api/automation-requests/${id}/history`, { auth: true })
+        return { data }
+      } catch (error) {
+        return { data: [] }
+      }
+    },
+  },
+
+  notices: {
+    async list() {
+      try {
+        const data = await fetchAPI('/api/notices')
+        return { data }
+      } catch (error) {
+        return { data: [] }
+      }
+    },
   },
 
   admin: {
@@ -142,6 +207,29 @@ export const api = {
           error: error instanceof Error ? error.message : '통계를 불러오지 못했습니다',
         };
       }
+    },
+
+    async applicationHistory() {
+      try {
+        const data = await fetchAPI('/api/admin/application-history', { auth: true })
+        return { data }
+      } catch (error) {
+        return { data: [] }
+      }
+    },
+
+    notices: {
+      async list() {
+        try {
+          const data = await fetchAPI('/api/notices/admin', { auth: true })
+          return { data }
+        } catch (error) {
+          return {
+            data: [],
+            error: error instanceof Error ? error.message : '공지사항을 불러오지 못했습니다',
+          }
+        }
+      },
     },
   },
 };

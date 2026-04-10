@@ -7,13 +7,14 @@ import { ArrowLeft, Edit, FileText, Calendar, User, Phone, Mail, Building, Downl
 import DownloadButton from './DownloadButton'
 
 interface ApplicationDetailPageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 export default async function ApplicationDetailPage({ params }: ApplicationDetailPageProps) {
-  const response = await api.applications.get(params.id)
+  const { id } = await params
+  const response = await api.applications.get(id)
   
   if (response.error) {
     return (
@@ -54,7 +55,7 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
         </div>
         
         {(application.status === 'DRAFT' || application.status === 'REVISION_REQUESTED') && (
-          <Link href={`/researcher/applications/${params.id}/edit`}>
+          <Link href={`/researcher/applications/${id}/edit`}>
             <Button>
               <Edit className="h-4 w-4 mr-2" />
               수정하기
@@ -255,7 +256,7 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
                 </div>
                 {application.irb_document_path && (
                   <DownloadButton
-                    applicationId={params.id}
+                    applicationId={id}
                     fileType="irb"
                     label="다운로드"
                   />
@@ -280,7 +281,7 @@ export default async function ApplicationDetailPage({ params }: ApplicationDetai
                 </div>
                 {application.research_plan_path && (
                   <DownloadButton
-                    applicationId={params.id}
+                    applicationId={id}
                     fileType="research-plan"
                     label="다운로드"
                   />

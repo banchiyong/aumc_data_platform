@@ -21,7 +21,11 @@ export default function LoginPage() {
   useEffect(() => {
     // 회원가입 성공 후 리다이렉트된 경우
     if (searchParams.get('registered') === 'true') {
-      setSuccessMessage('회원가입이 완료되었습니다. 로그인해주세요.')
+      if (searchParams.get('approval') === 'pending') {
+        setSuccessMessage('회원가입 신청이 완료되었습니다. 관리자 승인 후 로그인할 수 있습니다.')
+      } else {
+        setSuccessMessage('회원가입이 완료되었습니다. 로그인해주세요.')
+      }
     }
   }, [searchParams])
 
@@ -90,10 +94,10 @@ export default function LoginPage() {
                   id="username"
                   name="username"
                   type="text"
-                  placeholder="사용자명"
+                  placeholder="아이디"
                   required
                   disabled={loading}
-                  className="flex-1"
+                  className="flex-1 pl-10"
                 />
                 <span className="text-gray-600 text-sm whitespace-nowrap">
                   @aumc.ac.kr

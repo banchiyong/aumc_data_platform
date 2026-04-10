@@ -3,11 +3,14 @@ import { cookies } from 'next/headers';
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get('access_token')?.value;
+
+  const { id } = await params
+
   try {
-    const cookieStore = cookies();
-    const token = cookieStore.get('access_token')?.value;
 
     if (!token) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -22,7 +25,7 @@ export async function DELETE(
     }
 
     // 백엔드 API 호출
-    const response = await fetch(`http://localhost:10402/api/admin/applications/${params.id}`, {
+    const response = await fetch(`http://localhost:10402/api/admin/applications/${id}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`,

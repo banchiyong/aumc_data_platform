@@ -74,9 +74,9 @@ export function UserTable({ users }: UserTableProps) {
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                   user.is_active 
                     ? 'bg-green-100 text-green-800' 
-                    : 'bg-red-100 text-red-800'
+                    : 'bg-orange-100 text-orange-800'
                 }`}>
-                  {user.is_active ? '활성' : '비활성'}
+                  {user.is_active ? '활성' : '승인 대기'}
                 </span>
               </td>
               <td className="py-3 px-4">
@@ -93,7 +93,7 @@ export function UserTable({ users }: UserTableProps) {
                   >
                     {isLoading === user.id 
                       ? '처리 중...' 
-                      : (user.is_active ? '비활성화' : '활성화')}
+                      : (user.is_active ? '비활성화' : '가입 승인')}
                   </Button>
                 </div>
               </td>

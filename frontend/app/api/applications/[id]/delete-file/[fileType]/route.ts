@@ -5,18 +5,20 @@ const API_BASE_URL = process.env.BACKEND_URL || 'http://localhost:10402'
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string; fileType: string } }
+  { params }: { params: Promise<{ id: string; fileType: string }> }
 ) {
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
   const accessToken = cookieStore.get('access_token')
 
   if (!accessToken) {
     return new NextResponse('Unauthorized', { status: 401 })
   }
 
+  const { id, fileType } = await params
+
   try {
     const response = await fetch(
-      `${API_BASE_URL}/api/applications/${params.id}/delete-file/${params.fileType}`,
+      `${API_BASE_URL}/api/applications/${id}/delete-file/${fileType}`,
       {
         method: 'DELETE',
         headers: {

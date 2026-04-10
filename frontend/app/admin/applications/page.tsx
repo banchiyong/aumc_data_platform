@@ -4,9 +4,10 @@ import AdminApplicationsTable from './AdminApplicationsTable'
 export default async function AdminApplicationsPage({
   searchParams,
 }: {
-  searchParams: { status?: string; includeDeleted?: string }
+  searchParams: Promise<{ status?: string; includeDeleted?: string }>
 }) {
-  const includeDeleted = searchParams.includeDeleted === 'true'
+  const resolvedSearchParams = await searchParams
+  const includeDeleted = resolvedSearchParams.includeDeleted === 'true'
   const response = await api.applications.list({ include_deleted: includeDeleted })
   const applications = response.data || []
   
@@ -16,7 +17,7 @@ export default async function AdminApplicationsPage({
       
       <AdminApplicationsTable 
         applications={applications} 
-        initialStatus={searchParams.status || ''}
+        initialStatus={resolvedSearchParams.status || ''}
         initialIncludeDeleted={includeDeleted}
       />
     </div>
